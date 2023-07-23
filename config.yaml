@@ -2,20 +2,15 @@
 pre_render_graph_svg: false
 pre_render_graph_pdf: false
 pre_render_graph_png: false
-
-output_decompiled_c_and_disassembly_html: true
-
-# Show each path from the sinks to the end of trace
+output_decompiled_c_and_disassembly_html: false
 output_individual_paths_graph: true
-
-# Show all paths traced for all functions together in a single graph
 output_global_graph: false
-# If the global graph is too big, consider splitting it into each function to decrease compute time.
 split_global_graph_by_funcs: false 
+output_relative_paths: true
 
-# Especially for Docker whereby the container's root folder is different from 
-# the host's folder; Any href links made will need to be relative.
-output_relative_paths: true 
+output_prompt_directory: "CWE_78"
+output_dest_src_directory: "CWE_78"
+output_time_log: "time_ana"
 
 # ---------------------------- Sink & Source Config ---------------------------- #
 
