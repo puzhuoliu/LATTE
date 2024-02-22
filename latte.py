@@ -18,9 +18,6 @@ from ghidra.program.model.address import Address
 from ghidra.app.plugin.core.analysis import AutoAnalysisManager
 from ghidra.app.services import DataTypeManagerService
 
-# from ghidra.util.graph import DirectedGraph, Vertex, Edge
-# from ghidra.graph.viewer import GraphComponent
-# from ghidra.app.services import GraphService
 
 import logging
 import csv
@@ -37,8 +34,6 @@ import functools
 import time
 
 from threading import Thread
-# The external packages are included in the ./lib subdirectory instead of being listed in a
-# requirements.txt because it can be quite troublesome to install packages on Ghidra's Jython.
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(SCRIPT_PATH, 'lib')) 
 import yaml
@@ -73,7 +68,6 @@ PRE_RENDER_GRAPH_PNG                        = config["pre_render_graph_png"]    
 OUTPUT_INDIVIDUAL_PATHS_GRAPH               = config["output_individual_paths_graph"]               # bool
 OUTPUT_GLOBAL_GRAPH                         = config["output_global_graph"]                         # bool
 SPLIT_GLOBAL_GRAPH_BY_FUNCS                 = config["split_global_graph_by_funcs"]                 # bool
-OUTPUT_DECOMPILED_C_AND_DISASSEMBLY_HTML    = config["output_decompiled_c_and_disassembly_html"]    # bool
 OUTPUT_RELATIVE_PATHS                       = config["output_relative_paths"]                       # bool
 
 OUT_prompt_directory                 = config["output_prompt_directory"]                 # bool
@@ -89,7 +83,7 @@ try: # Grab from environment variables (Usually passed via the launcher script)
 except: # Default directory
     OUTPUT_DIR = os.path.join(
         "/home/user/Document/", 
-        "Turbine_Output"
+        "Latte_Output"
         )
          # "{}-{}".format(
          #    getCurrentProgram().getName(),
@@ -108,7 +102,6 @@ OUTPUT_DIR_POTENTIALLY_VULNERABLE_PATHS = "Potentially Vulnerable"
 OUTPUT_DIR_UNKNOWN_PATHS = "Potentially Vulnerable"
 OUTPUT_DIR_Decompile_PATHS= "Decompile_result"
 OUTPUT_DIR_GLOBAL_GRAPHS = "Global Graph"
-OUTPUT_FILEPATH_DECOMPILED_C_AND_DISASSEMBLY_HTML = "Decompiled C.html"
 OUTPUT_FILEPATH_CALLER_CALLEE_CSV = "Caller-Callee Function Calls.csv"
 Varusage=set()
 Source_label=dict()
@@ -164,7 +157,7 @@ console_handler.setLevel(LOG_LEVELS_MAP[config["console_log_level"]])
 console_handler.setFormatter(logger_format)
 logger.addHandler(console_handler)
 
-logfile_path = os.path.join(OUTPUT_DIR, "ghost.log")
+logfile_path = os.path.join(OUTPUT_DIR, "latte.log")
 file_handler = logging.FileHandler(logfile_path, mode="w")
 file_handler.setLevel(LOG_LEVELS_MAP[config["file_log_level"]])
 file_handler.setFormatter(logger_format)
@@ -327,21 +320,6 @@ class TraceInfo(object):
 
     @classmethod
     def get_instance(cls, source_node, sink_node, trace_type,sig=[],alias=set()):
-        """Gets an existing instance of a trace with the same source-sink-type, else it creates a new instance.
-
-        Gets a TraceInfo instance either by returning an already existing one or initializing a new one if it does not 
-        already exist. This is to prevent duplicate representations and otherwise repeated tracings of the same trace.
-        
-        Also automatically adds new instances to the trace_queue.
-
-        Parameters:
-            source_node (Param | ArbitraryParam | ReturnVal | Arg | FuncCallOutput)
-            sink_node (Param | ArbitraryParam | ReturnVal | Arg | FuncCallOutput)
-            trace_type (TraceType)
-
-        Returns:
-            TraceInfo
-        """
         if not hasattr(cls, 'instances'):
             cls.instances = {}
             cls.trace_queue = []
@@ -374,26 +352,6 @@ class TraceInfo(object):
     
 
 class VarnodeUpgraderMixin():
-    """Provides supplementary methods to get a corresponding varnode with more information.
-    
-    Attributes:
-        varnode (ghidra.program.model.pcode.Varnode | None):
-            It is required that the superclass of this mixin has the varnode attribute, as this mixin will analyze based 
-            on this varnode object. This will also be replaced by the upgraded varnode if one is found.
-        origin_varnode (ghidra.program.model.pcode.Varnode | None):
-            As the "upgraded" varnode will replace the varnode attribute, this attribute will keep track of the original
-            varnode so that tracing operations on the varnode level (i.e. Arg.trace_to_func_call_output()) can start 
-            tracing from the original varnode location.
-        high_var (ghidra.program.model.pcode.HighVariable | None):
-            The result of the upgraded varnode's getHigh() method.
-        sym (ghidra.program.model.pcode.HighSymbol | None):
-            The corresponding symbol of the upgraded varnode.
-        name (str | None):
-            The name of the upgraded varnode.
-        buffer_size (int | None):
-            The buffer size obtained from the upgraded varnode symbol.
-    """
-    
     def varnode_upgrade(self):
         """Run all upgrades. 
         
@@ -2164,24 +2122,8 @@ class OutputGraph(object):
 
     @classmethod
     def output_global(cls, func_color="#c9e4d8", val_color="#a7d3a9", source_color="#11069d", sink_color="#9b0748"):
-        """Outputs a global graph (i.e. All the Func and FuncCall objects will be graphed with their respective traces).
-        
-        Notes:
-            - Attributes pertaining to graph information will be added to the Func and FuncCall objects
-            - Output directories are set via the config.yaml
-        
-        Parameters:
-            func_color (str):
-                The background color for a Func. Defaults to "#c9e4d8".
-            val_color (str):
-                The background color for a Param/ReturnVal/Arg/FuncCallOutput. Defaults to "#a7d3a9".
-            source_color (str):
-                The font color for FuncCalls whereby the callee is a source function. Defaults to "#11069d".
-            sink_color (str):
-                The font color for FuncCalls whereby the callee is a sink function. Defaults to "#9b0748".
-        """
-        
-        graph = pydot.Dot("GhOSTGlobalOutput", graph_type="digraph")
+
+        graph = pydot.Dot("latteGlobalOutput", graph_type="digraph")
         graph.set_node_defaults(shape="plain")
 
         
@@ -2327,7 +2269,7 @@ class OutputGraph(object):
         if SPLIT_GLOBAL_GRAPH_BY_FUNCS:
             for func in graphed_funcs:
                 split_func_graph = pydot.Dot(
-                    "GhOSTGlobalOutput_SplitFunc{}".format(
+                    "latteGlobalOutput_SplitFunc{}".format(
                         cls._format_graph_node_label(func, val_color)
                         ), 
                     graph_type="digraph"
@@ -2395,21 +2337,7 @@ class OutputGraph(object):
     
     @classmethod
     def _format_href_to_decompiled_funcs(cls, node):
-        """Format the href for linking the graph nodes to the corresponding address in the decompiled/disassembled html output.
-        
-        Parameters:
-            node (Func | FuncCall)
-            
-        Returns:
-            str: The formatted href string
-            
-            
-        See Also:
-            output_decompiled_c_and_disassembly_html()
-        """
-        if not OUTPUT_DECOMPILED_C_AND_DISASSEMBLY_HTML:
-            return ""
-        
+
         if isinstance(node, Func):
             href_addr = node.entry_address
         elif isinstance(node, FuncCall):
@@ -2420,10 +2348,7 @@ class OutputGraph(object):
         else:
             file_uri_string = "file:///"+OUTPUT_FILEPATH_DECOMPILED_C_AND_DISASSEMBLY_HTML+"#{}".format(href_addr)
 
-        # The string '\G' value will be replaced by the graph name (ref. https://www.graphviz.org/pdf/dot.1.pdf and https://graphviz.org/docs/attr-types/escString/) 
-        # As this is a format for a filepath, it is easy for the filepath to contain the '\G'. 
-        # E.g. C:\...\...\GhOST Output\...\Decompiled C.html
-        #                ^^
+ 
         file_uri_string = file_uri_string.replace(r"\G", r"\\G")
         return file_uri_string
             
@@ -2701,65 +2626,6 @@ def output_json_prompt(filepath,prompt):
     with open("{}".format(filepath), "w+") as f:
         json.dump(prompt,f)
      
-
-def output_decompiled_c_and_disassembly_html(filepath):
-    """Outputs the decompiled C code and disassembly of all the functions in the current program to a html file.
-    
-    The HTML elements will have ids for the address of each function and function call so as to be able to 
-    jump to a specific address. The links to these ids are from the graph. 
-    
-    Parameters:
-        filepath (str)
-    
-    See Also:
-        OutputGraph._format_href_to_decompiled_funcs() for the information on where it is linked from.
-    
-    """
-    function_string_template = """
-<table width='100%'>
-    <tr>
-        <td id='{entrypoint_address}'><b>{name} entrypoint addr: </b>{entrypoint_address}</td>
-    </tr>
-    <tr>
-        <td width='50%' style='border: 1px solid black; padding: 10px; vertical-align:top;'>
-            <pre style='word-wrap: break-word;'>{decompiled_c}</pre>
-        </td>
-        <td width='50%' style='border: 1px solid black; padding: 10px; vertical-align:top;'>
-            {disassembly}
-        </td>
-    </tr>
-</table>
-"""
-    disassembly_string_template="""<pre style='padding: 0;margin: 0;' id='{address}'>0x{address}      {disassembled_instruction}</pre>
-            """
-            
-    html_string = ""
-    functions = function_manager.getFunctions(True)
-    for f in functions:
-        decompiled_function_results = decompiler_interface.decompileFunction(f, 0, monitor)
-        decompiled_c = decompiled_function_results.getDecompiledFunction().getC()
-        
-        function_address_set = f.getBody()
-        code_units = listing.getCodeUnits(function_address_set, True) # The CodeUnit type gives us access to the disassembled instructions
-        disassembly_string = ""
-        for cu in code_units:
-            disassembly_string += disassembly_string_template.format(
-                address=cu.getAddress(), 
-                disassembled_instruction=cu.toString()
-                )
-        html_string += function_string_template.format(
-            entrypoint_address=str(f.getEntryPoint()), 
-            name=str(f.getName()), 
-            decompiled_c=cgi.escape(decompiled_c),
-            disassembly=disassembly_string
-            )
-        
-    with open(filepath, "w+") as f:
-        f.write(html_string)
-        
-        
-        
-
 
 
 def get_references(caller, callee):
@@ -3078,44 +2944,8 @@ def main():
         json.dump(json_Str,f)
     for key in funcs_dict.keys():
         print("Need analysis function: {} @ 0x{}".format(key,funcs_dict[key]))  
-
-
-    # proj_name = "{}-{}".format(
-    #             getCurrentProgram().getName(),
-    #             "function_content"
-    #             )
-    # decompile_result= filepath_template = os.path.join(OUTPUT_DIR_Decompile_PATHS,"CWE_190_bad_1", "{}.{{}}".format(proj_name))
-    # full_filepath = decompile_result.format("json") 
-    # with open("{}".format(full_filepath), "w+") as f:
-    #     json_Str = json.dumps(funcs_content_dict)
-    #     json.dump(json_Str,f)
-    # for key in funcs_content_dict.keys():
-    #     #print("Need analysis function content: {}".format(key)) 
-    #     print("Need analysis function content: {} {}".format(key,funcs_content_dict[key]))     
-    #
-    #
-
             
-    logger.info("Tracing start: {}".format(datetime.now()))
-    # debug="FUN_0006e450"
-    # funcs = Func.get_instances_by_name(debug)
-    # for f in funcs:
-    #         for p in f.params:
-    #             try:
-    #                 p.trace_to_arg()
-    #                 p.func.find_func_calls()
-    #                 for fc in p.func.func_calls:
-    #                     try:
-    #                         chain=call_chain_byone(fc)
-    #                         func_dict[fc]=[]
-    #                         func_dict[fc].append(fc.caller_func)
-    #                         for fun in chain:
-    #                             func_dict[fc].append(fun)
-    #                     except:
-    #                         print("Timeout!!!! Next!!!!")  
-    #             except:
-    #                 print("Timeout!!!! Next!!!!")  
-################################################                
+    logger.info("Tracing start: {}".format(datetime.now()))           
     for sink_name in SINK_FUNCS:
         funcs = Func.get_instances_by_name(sink_name)
         for f in funcs:
@@ -3151,90 +2981,6 @@ def main():
     print(run_time)
     OutputGraph.output_time(run_time)
 #################################################
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# def main():
-#   for sink_name in SINK_FUNCS:
-    #     funcs = Func.get_instances_by_name(sink_name)
-    #     for f in funcs:
-    #         for p in f.params:
-    #             p.trace_to_arg()
-    # for source_name in TAINT_LABELS:
-    #     funcs = Func.get_instances_by_name(source_name)
-    #     for f in funcs:
-    #         f.find_func_calls()
-    #         for caller in f.func_calls:
-    #             addr=caller.addr
-    #             if addr not in Source_label:
-    #                 Source_label[addr]=TAINT_LABELS[source_name]
-
-#
-#
-#
-#     # Start tracing loop via TraceInfo queue
-#     next_trace = TraceInfo.get_next_in_queue()
-#     progress_counter = 0
-#     while next_trace:
-#         if hasattr(next_trace.source_node,"func_call"):
-#             if next_trace.source_node.func_call.addr in Source_label.keys():
-#                 if hasattr(next_trace.source_node,"index"):
-#                     if next_trace.source_node.index in Source_label[next_trace.source_node.func_call.addr]:
-#                         next_trace = TraceInfo.get_next_in_queue()
-#                         continue
-#                 elif "CallOutput" in str(type(next_trace.source_node)) and "ret" in Source_label[next_trace.source_node.func_call.addr]:
-#                     next_trace = TraceInfo.get_next_in_queue()
-#                     continue
-#         # else:
-#         #     next_trace.signature.append(str(next_trace.source_node.func).split(" ",1)[1])
-#         logger.debug("Tracing {}".format(next_trace))
-#         if next_trace.trace_type in (TraceType.ArgUsagePassedIntoFunc):
-#             next_trace.sink_node.trace_source_all()
-#         else:
-#
-#             # hfunction=next_trace.source_node.high_var.getHighFunction()
-#             # cfg=extract_data_dependency_graph(hfunction.function)
-#             next_trace.source_node.trace_source_all()
-#         next_trace = TraceInfo.get_next_in_queue()
-#         progress_counter += 1
-#         if progress_counter % 100 == 0:
-#             logger.info("Traces counter: {}/{} [total completed/total found]".format(progress_counter, len(TraceInfo.instances)))
-#             if progress_counter == 30000:
-#                 logger.warning("For debugging purposes the tracing loop has been stopped")
-#                 break
-#     logger.info("Tracing end: {}".format(datetime.now()))
-#
-#     # Outputs
-#     if OUTPUT_GLOBAL_GRAPH:
-#         OutputGraph.output_global()
-#     if OUTPUT_INDIVIDUAL_PATHS_GRAPH:
-#         OutputGraph.output_individual_paths()
-#     if OUTPUT_DECOMPILED_C_AND_DISASSEMBLY_HTML:
-#         output_decompiled_c_and_disassembly_html(OUTPUT_FILEPATH_DECOMPILED_C_AND_DISASSEMBLY_HTML)
-#     logger.info("Output completed: {}".format(datetime.now()))
-
-# print """
 
 
 main()
